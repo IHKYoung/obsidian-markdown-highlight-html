@@ -239,9 +239,9 @@ class MarkdownHighlightTagToHtmlStyleSettingTab extends PluginSettingTab {
         // 自动识别延迟设置
         new Setting(containerEl)
             .setName('自动转换延迟（毫秒）')
-            .setDesc('设置自动识别并转换 ==xxx== 的延迟时间，默认500毫秒。')
+            .setDesc('设置自动识别并转换 ==xxx== 的延迟时间，默认200毫秒。')
             .addText(text => text
-                .setPlaceholder('500')
+                .setPlaceholder('200')
                 .setValue(this.plugin.settings.autoConvertDelay.toString())
                 .onChange(async (value) => {
                     const parsed = parseInt(value);
