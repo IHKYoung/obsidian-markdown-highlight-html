@@ -1,7 +1,10 @@
 # Markdown Highlight Tag to Htm Highlight Tag
 
-将Markdown高亮标记'=='自动转换为HTML高亮标记'<mark>'
-Automatically convert Markdown highlight tag '==' to HTML highlight tag '<mark>'
+```bash
+将Markdown高亮标记'==xxx=='自动转换为HTML高亮标记'<mark>xxx</mark>'
+
+Automatically convert Markdown highlight tag '==xxx==' to HTML highlight tag '<mark>xxx</mark>'
+```
 
 ## 使用方法
 
