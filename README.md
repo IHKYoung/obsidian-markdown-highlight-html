@@ -1,19 +1,85 @@
-# Markdown Highlight Tag to Htm Highlight Tag
+# Markdown Highlight Tag to HTML Style
 
-```bash
-将Markdown高亮标记'==xxx=='自动转换为HTML高亮标记'<mark>xxx</mark>'
+Convert Markdown highlight syntax like `==text==` into HTML `<mark>text</mark>` while editing notes in Obsidian.
 
-Automatically convert Markdown highlight tag '==xxx==' to HTML highlight tag '<mark>xxx</mark>'
+## Overview
+
+This plugin is for people who want highlighted text to be stored as explicit HTML markup instead of Markdown highlight syntax.
+
+When you type `==highlight==`, the plugin converts the current line to:
+
+```html
+<mark>highlight</mark>
 ```
 
-## 使用方法
+## Features
 
-```bash
-==输入内容==后自动转换为<mark>输入内容</mark>
-```
+- Automatically converts `==text==` to `<mark>text</mark>` after a configurable delay.
+- Adds a command: `Convert ==xxx== to <mark>xxx</mark>`.
+- Skips fenced code blocks.
+- Skips inline code spans wrapped in backticks.
+- Keeps the cursor position aligned after conversion.
+
+## Important Behavior
+
+This plugin rewrites the source content of your note.
+
+- Input: `==important==`
+- Output: `<mark>important</mark>`
+
+If you want to keep native Markdown highlight syntax in your files, this plugin is not a good fit.
 
 ## Usage
 
+1. Open a note in edit mode.
+2. Type highlight syntax such as `==important==`.
+3. Wait for the configured delay, or run the command manually from the command palette.
+
+Notes:
+
+- Automatic conversion applies to the current line being edited.
+- Manual conversion also works on the current line at the cursor.
+- Content inside fenced code blocks or inline code is ignored.
+
+## Settings
+
+The plugin currently exposes one setting:
+
+- `Auto convert delay (ms)`: Delay before automatic conversion runs. Default: `200`.
+
+## Installation
+
+### Manual installation
+
+Until the plugin is available through the Obsidian Community Plugins directory, install it manually:
+
+1. Download the release assets for the version you want.
+2. Create a folder named `markdown-highlight-html` inside your vault's `.obsidian/plugins/`.
+3. Put `manifest.json` and `main.js` into that folder.
+4. Reload Obsidian and enable the plugin in Community Plugins.
+
+### Community Plugins
+
+When the plugin is published, you will be able to install it from:
+
+`Settings -> Community plugins -> Browse`
+
+## Development
+
 ```bash
-==Input Content== will be automatically converted to <mark>Input Content</mark>
+npm install
+npm run dev
+npm run build
 ```
+
+`npm run build` generates the bundled `main.js` file for release packaging.
+
+Compiled release files are intentionally not committed to the repository. Keep source files in Git, and upload release artifacts through GitHub Releases instead.
+
+## Compatibility
+
+- Minimum Obsidian version: `0.12.0`
+
+## License
+
+MIT

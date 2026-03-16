@@ -1,6 +1,6 @@
 {
 	"name": "markdown-highlight-html",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"description": "Markdown Highlight Tag to HTML Style",
 	"main": "main.js",
 	"scripts": {

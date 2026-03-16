@@ -1,24 +1,24 @@
-import { App, Editor, MarkdownView, Notice, Plugin, PluginSettingTab, Setting } from 'obsidian';
+import { App, Editor, EventRef, MarkdownView, Notice, Plugin, PluginSettingTab, Setting, TextComponent, debounce } from 'obsidian';
 
 /**
- * 插件的设置接口
+ * Plugin settings interface.
  */
 interface MarkdownHighlightTagToHtmlStyle {
-    autoConvertDelay: number; // 自动转换的延迟时间（毫秒）
+    autoConvertDelay: number; // Delay before automatic conversion, in milliseconds.
 }
 
 /**
- * 插件的默认设置
+ * Default plugin settings.
  */
 const DEFAULT_SETTINGS: MarkdownHighlightTagToHtmlStyle = {
     autoConvertDelay: 200
 };
 
 /**
- * 判断指定行是否在代码块内
- * @param lines 所有行内容
- * @param lineNumber 当前行号（从0开始）
- * @returns 是否在代码块内
+ * Check whether the specified line is inside a fenced code block.
+ * @param lines All lines in the editor.
+ * @param lineNumber Current line number, zero-based.
+ * @returns Whether the line is inside a fenced code block.
  */
 function isLineInCodeBlock(lines: string[], lineNumber: number): boolean {
     let inCodeBlock = false;
@@ -42,9 +42,10 @@ function isLineInCodeBlock(lines: string[], lineNumber: number): boolean {
 }
 
 /**
- * 替换单行中的 ==xxx== 为 <mark>xxx</mark>，但忽略行内代码中的 ==。
- * @param line 原始行内容
- * @returns 替换后的行内容及是否进行了替换
+ * Replace ==xxx== with <mark>xxx</mark> on a single line,
+ * while ignoring inline code spans.
+ * @param line Original line content.
+ * @returns The updated line and whether a replacement happened.
  */
 function replaceHighlightLine(line: string): { newLine: string; replaced: boolean } {
     let inInlineCode = false;
@@ -59,12 +60,12 @@ function replaceHighlightLine(line: string): { newLine: string; replaced: boolea
         }
 
         if (!inInlineCode && line[i] === '=' && line[i + 1] === '=') {
-            // 找到 == 开始
+            // Found the opening == marker.
             const endIdx = line.indexOf('==', i + 2);
             if (endIdx !== -1) {
                 const highlightedText = line.substring(i + 2, endIdx);
                 result += `<mark>${highlightedText}</mark>`;
-                i = endIdx + 1; // 跳过结束 ==
+                i = endIdx + 1; // Skip the closing == marker.
                 replaced = true;
                 continue;
             }
@@ -76,150 +77,132 @@ function replaceHighlightLine(line: string): { newLine: string; replaced: boolea
     return { newLine: result, replaced };
 }
 
-/**
- * 简单的防抖函数实现
- * @param func 需要防抖的函数
- * @param wait 防抖的时间间隔（毫秒）
- * @returns 防抖后的函数
- */
-function debounceFunc(func: () => void, wait: number) {
-    let timeout: number | undefined;
-    return () => {
-        if (timeout !== undefined) {
-            clearTimeout(timeout);
-        }
-        timeout = window.setTimeout(() => {
-            func();
-        }, wait);
-    };
-}
-
 export default class MarkdownHighlightTagToHtmlStylePlugin extends Plugin {
     settings: MarkdownHighlightTagToHtmlStyle;
     private onEditHandler: () => void;
+    private editorChangeEvent: EventRef | null = null;
 
     /**
-     * 加载插件时的初始化逻辑
+     * Initialize the plugin when it loads.
      */
     async onload() {
         await this.loadSettings();
 
-        // 添加一个命令用于高亮替换
+        // Add a command for manual conversion.
         this.addCommand({
             id: 'convert-highlight',
             name: 'Convert ==xxx== to <mark>xxx</mark>',
-            editorCallback: (editor: Editor, view: MarkdownView) => {
-                this.convertHighlight(editor);
+            editorCallback: (editor: Editor) => {
+                this.convertHighlight(editor, true);
             }
         });
 
-        // 创建防抖后的编辑器变化处理函数
-        this.onEditHandler = debounceFunc(() => {
-            const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
-            if (activeView) {
-                const editor = activeView.editor;
-                this.convertHighlight(editor);
-            }
-        }, this.settings.autoConvertDelay);
+        this.registerEditorChangeHandler();
 
-        // 注册编辑器变化事件
-        this.registerEvent(this.app.workspace.on('editor-change', this.onEditHandler));
-
-        // 添加设置选项卡
+        // Add the settings tab.
         this.addSettingTab(new MarkdownHighlightTagToHtmlStyleSettingTab(this.app, this));
     }
 
     /**
-     * 卸载插件时的清理逻辑
+     * Clean up when the plugin unloads.
      */
     onunload() {
-        console.log('Mark to Highlight Plugin Unloaded.');
+        if (this.editorChangeEvent) {
+            this.app.workspace.offref(this.editorChangeEvent);
+            this.editorChangeEvent = null;
+        }
     }
 
     /**
-     * 加载插件设置
+     * Load plugin settings.
      */
     async loadSettings() {
         this.settings = Object.assign({}, DEFAULT_SETTINGS, await this.loadData());
     }
 
     /**
-     * 保存插件设置
+     * Save plugin settings.
      */
     async saveSettings() {
         await this.saveData(this.settings);
     }
 
     /**
-     * 更新自动转换延迟时间
-     * @param newDelay 新的延迟时间（毫秒）
+     * Update the auto-convert delay.
+     * @param newDelay New delay in milliseconds.
      */
-    public updateAutoConvertDelay(newDelay: number) {
+    public async updateAutoConvertDelay(newDelay: number) {
+        if (this.settings.autoConvertDelay === newDelay) {
+            return;
+        }
+
         this.settings.autoConvertDelay = newDelay;
-        this.saveSettings();
+        await this.saveSettings();
+        this.registerEditorChangeHandler();
+    }
 
-        // 移除旧的事件监听
-        this.app.workspace.off('editor-change', this.onEditHandler);
+    private registerEditorChangeHandler() {
+        if (this.editorChangeEvent) {
+            this.app.workspace.offref(this.editorChangeEvent);
+        }
 
-        // 创建新的防抖处理函数
-        this.onEditHandler = debounceFunc(() => {
+        this.onEditHandler = debounce(() => {
             const activeView = this.app.workspace.getActiveViewOfType(MarkdownView);
             if (activeView) {
-                const editor = activeView.editor;
-                this.convertHighlight(editor);
+                this.convertHighlight(activeView.editor);
             }
         }, this.settings.autoConvertDelay);
 
-        // 重新注册编辑器变化事件
-        this.registerEvent(this.app.workspace.on('editor-change', this.onEditHandler));
+        this.editorChangeEvent = this.app.workspace.on('editor-change', this.onEditHandler);
     }
 
     /**
-     * 执行高亮转换，并保持光标位置
-     * @param editor 当前编辑器实例
+     * Convert highlight syntax on the current line while preserving the cursor.
+     * @param editor Active editor instance.
      */
-    private convertHighlight(editor: Editor) {
-        const cursor = editor.getCursor(); // 保存光标位置
+    private convertHighlight(editor: Editor, showSuccessNotice = false) {
+        const cursor = editor.getCursor(); // Preserve the current cursor position.
         const currentLineNumber = cursor.line;
         const currentLineText = editor.getLine(currentLineNumber);
 
-        // 获取所有行内容
+        // Read the full document to detect fenced code blocks correctly.
         const allLines = editor.getValue().split('\n');
 
-        // 判断当前行是否在代码块内
+        // Skip conversion inside fenced code blocks.
         const inCodeBlock = isLineInCodeBlock(allLines, currentLineNumber);
 
         if (inCodeBlock) {
-            // 当前行在代码块内，跳过替换
             return;
         }
 
         const { newLine, replaced } = replaceHighlightLine(currentLineText);
 
         if (replaced) {
-            // 计算光标在替换前的位置
+            // Track the cursor based on text before the original cursor.
             const beforeCursorText = currentLineText.substring(0, cursor.ch);
 
-            // 替换行内容
+            // Update the current line.
             editor.setLine(currentLineNumber, newLine);
 
-            // 找到 </mark> 在新行的位置
+            // Restore the cursor near the converted markup.
             const markEnd = newLine.indexOf('</mark>', beforeCursorText.length);
             if (markEnd !== -1) {
                 const newCh = markEnd + '</mark>'.length;
                 editor.setCursor({ line: currentLineNumber, ch: newCh });
             } else {
-                // 如果没有找到 </mark>，则将光标设置到行尾
+                // Fall back to the end of the line if the closing tag was not found.
                 editor.setCursor({ line: currentLineNumber, ch: newLine.length });
             }
 
-            new Notice('✨ Markdown Highlight Converted Automatically!');
+            if (showSuccessNotice) {
+                new Notice('Markdown highlight converted.');
+            }
         }
     }
 }
 
 /**
- * 插件的设置选项卡
+ * Plugin settings tab.
  */
 class MarkdownHighlightTagToHtmlStyleSettingTab extends PluginSettingTab {
     plugin: MarkdownHighlightTagToHtmlStylePlugin;
@@ -233,25 +216,34 @@ class MarkdownHighlightTagToHtmlStyleSettingTab extends PluginSettingTab {
         const { containerEl } = this;
         containerEl.empty();
 
-        // 设置标题
-        containerEl.createEl('h2', { text: 'Mark to Highlight 设置' });
-
-        // 自动识别延迟设置
+        // Auto-convert delay setting.
         new Setting(containerEl)
-            .setName('自动转换延迟（毫秒）')
-            .setDesc('设置自动识别并转换 ==xxx== 的延迟时间，默认200毫秒。')
-            .addText(text => text
-                .setPlaceholder('200')
-                .setValue(this.plugin.settings.autoConvertDelay.toString())
-                .onChange(async (value) => {
-                    const parsed = parseInt(value);
-                    if (!isNaN(parsed) && parsed >= 0) {
-                        // 调用插件的公共方法更新延迟时间
-                        this.plugin.updateAutoConvertDelay(parsed);
-                        new Notice(`自动转换延迟已设置为 ${parsed} 毫秒`);
-                    } else {
-                        new Notice('请输入有效的毫秒数（非负整数）。');
-                    }
-                }));
+            .setName('Auto convert delay (ms)')
+            .setDesc('Set the delay before ==xxx== is converted automatically. Default: 200 ms.')
+            .addText(text => {
+                text
+                    .setPlaceholder('200')
+                    .setValue(this.plugin.settings.autoConvertDelay.toString());
+
+                text.inputEl.type = 'number';
+                text.inputEl.min = '0';
+                text.inputEl.step = '50';
+
+                this.plugin.registerDomEvent(text.inputEl, 'change', () => {
+                    void this.handleDelayChange(text.getValue(), text);
+                });
+            });
+    }
+
+    private async handleDelayChange(value: string, text: TextComponent): Promise<void> {
+        const parsed = Number.parseInt(value, 10);
+        if (Number.isNaN(parsed) || parsed < 0) {
+            new Notice('Please enter a valid non-negative delay in milliseconds.');
+            text.setValue(this.plugin.settings.autoConvertDelay.toString());
+            return;
+        }
+
+        await this.plugin.updateAutoConvertDelay(parsed);
+        text.setValue(parsed.toString());
     }
 }

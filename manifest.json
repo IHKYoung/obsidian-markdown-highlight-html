@@ -1,12 +1,10 @@
 {
 	"id": "markdown-highlight-html",
 	"name": "Markdown Highlight Tag to HTML Style",
-	"version": "1.0.0",
+	"version": "1.0.1",
 	"minAppVersion": "0.12.0",
 	"description": "Converts ==xxx== to <mark>xxx</mark>.",
 	"author": "Clarke Young",
 	"authorUrl": "https://ahaknow.com",
-	"fundingUrl": "https://ahaknow.com",
 	"isDesktopOnly": false
 }
-
